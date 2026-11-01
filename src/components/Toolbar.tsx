@@ -11,6 +11,7 @@ interface ToolDef {
 /** Tools exposed in the UI ('window' placement is not implemented yet). */
 export const TOOLS: ToolDef[] = [
   { tool: 'select', icon: 'fas fa-mouse-pointer', label: 'Select', title: 'Select' },
+  { tool: 'pan', icon: 'far fa-hand', label: 'Pan', title: 'Pan (or hold Space and drag)' },
   { tool: 'room', icon: 'fas fa-vector-square', label: 'Room', title: 'Add Room (Heated)' },
   { tool: 'zone', icon: 'far fa-square', label: 'Zone', title: 'Add Zone (Unheated)' },
   { tool: 'window', icon: 'far fa-window-maximize', label: 'Window', title: 'Add Window' },
@@ -61,6 +62,16 @@ export function Toolbar({ tool, onToolChange, globals, onGlobalsChange, onCalcul
           step={0.1}
           min={2}
           onChange={(roomHeight) => onGlobalsChange({ roomHeight })}
+        />
+
+        <label htmlFor="wallU" title="U-value of all external walls">Wall U (W/m²K)</label>
+        <NumberField
+          id="wallU"
+          value={globals.wallU}
+          step={0.05}
+          min={0.05}
+          max={5}
+          onChange={(wallU) => onGlobalsChange({ wallU })}
         />
 
         <label htmlFor="gridSize">Grid (m)</label>

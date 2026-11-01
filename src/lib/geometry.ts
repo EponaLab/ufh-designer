@@ -45,6 +45,47 @@ export function snapMeters(value: number, gridSize: number): number {
   return Math.round(value / gridSize) * gridSize;
 }
 
+// ---------------------------------------------------------------- Node snapping
+
+/** Pointer distance (screen px) within which a node's coordinate wins over the grid. */
+export const NODE_SNAP_TOLERANCE_PX = 10;
+
+/** Corner points ("nodes") of rectangles, meters. */
+export function rectNodes(rects: readonly Rect[]): Point[] {
+  return rects.flatMap((r) => [
+    { x: r.x, y: r.y },
+    { x: r.x + r.width, y: r.y },
+    { x: r.x, y: r.y + r.height },
+    { x: r.x + r.width, y: r.y + r.height },
+  ]);
+}
+
+/** The coordinate closest to `value` within `tolerance`, or null if none is that close. */
+export function snapToCoords(value: number, coords: readonly number[], tolerance: number): number | null {
+  let best: number | null = null;
+  for (const c of coords) {
+    if (Math.abs(c - value) <= tolerance && (best === null || Math.abs(c - value) < Math.abs(best - value))) best = c;
+  }
+  return best;
+}
+
+/**
+ * Start coordinate for a span `[start, start + size]` whose near or far edge aligns with one of
+ * `coords` (within `tolerance`); otherwise the start snapped to the grid.
+ */
+export function snapSpan(start: number, size: number, coords: readonly number[], tolerance: number, gridSize: number): number {
+  const aligned = snapToCoords(start, [...coords, ...coords.map((c) => c - size)], tolerance);
+  return aligned ?? snapMeters(start, gridSize);
+}
+
+/** Nodes that coincide with any of the given points (to mark where a snap happened). */
+export function coincidentNodes(nodes: readonly Point[], points: readonly Point[], eps = 1e-6): Point[] {
+  return nodes.filter((n) => points.some((p) => Math.abs(n.x - p.x) < eps && Math.abs(n.y - p.y) < eps));
+}
+
+/** The four corners of a rectangle. */
+export const rectCorners = (r: Rect): Point[] => rectNodes([r]);
+
 export function clampZoom(zoom: number): number {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
 }
@@ -188,18 +229,24 @@ export function hitResizeHandle(rect: Rect, p: Point, tolerance: number): Resize
 
 /**
  * New rectangle when dragging `handle` of `original` to point `p` (meters).
- * Moved edges snap to the grid; the opposite edges stay fixed; size never drops below `minSize`.
+ * Moved edges are snapped with `snap` (per axis); the opposite edges stay fixed; size never drops below `minSize`.
  */
-export function resizeRect(original: Rect, handle: ResizeHandle, p: Point, gridSize: number, minSize: number): Rect {
+export function resizeRect(
+  original: Rect,
+  handle: ResizeHandle,
+  p: Point,
+  snap: { x: (v: number) => number; y: (v: number) => number },
+  minSize: number,
+): Rect {
   let left = original.x;
   let right = original.x + original.width;
   let top = original.y;
   let bottom = original.y + original.height;
 
-  if (handle.includes('w')) left = Math.min(snapMeters(p.x, gridSize), right - minSize);
-  if (handle.includes('e')) right = Math.max(snapMeters(p.x, gridSize), left + minSize);
-  if (handle.includes('n')) top = Math.min(snapMeters(p.y, gridSize), bottom - minSize);
-  if (handle.includes('s')) bottom = Math.max(snapMeters(p.y, gridSize), top + minSize);
+  if (handle.includes('w')) left = Math.min(snap.x(p.x), right - minSize);
+  if (handle.includes('e')) right = Math.max(snap.x(p.x), left + minSize);
+  if (handle.includes('n')) top = Math.min(snap.y(p.y), bottom - minSize);
+  if (handle.includes('s')) bottom = Math.max(snap.y(p.y), top + minSize);
 
   return { x: left, y: top, width: right - left, height: bottom - top };
 }

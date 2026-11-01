@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import { Header } from './components/Header';
 import { ResultsPanel } from './components/ResultsPanel';
@@ -8,13 +8,18 @@ import { MobileToolbar, Toolbar } from './components/Toolbar';
 import { DEFAULT_GLOBALS, INITIAL_VIEWPORT, OPENING_LABEL, TABLET_BREAKPOINT } from './constants';
 import { useWindowWidth } from './hooks/useWindowWidth';
 import { calculateProject, type ProjectResults } from './lib/heatLoss';
-import { initialProjectState, projectReducer, type OpeningPatch } from './state/projectReducer';
+import { downloadProject, loadAutosave, parseProject, writeAutosave } from './lib/projectFile';
+import { initialProjectState, projectFromData, projectReducer, type OpeningPatch } from './state/projectReducer';
 import type { GlobalSettings, OpeningKind, Rect, RoomType, Tool, Viewport, WallSide } from './types';
 
 export default function App() {
-  const [project, dispatch] = useReducer(projectReducer, initialProjectState);
+  // Restore the last session from the browser autosave (read once).
+  const [restored] = useState(loadAutosave);
+  const [project, dispatch] = useReducer(projectReducer, restored, (r) =>
+    r ? projectFromData(r.rooms, r.openings) : initialProjectState,
+  );
   const [tool, setTool] = useState<Tool>('select');
-  const [globals, setGlobals] = useState<GlobalSettings>(DEFAULT_GLOBALS);
+  const [globals, setGlobals] = useState<GlobalSettings>(restored?.globals ?? DEFAULT_GLOBALS);
   const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEWPORT);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Results are shown after "Calculate" and then stay live as the design changes. */
@@ -83,8 +88,44 @@ export default function App() {
   const handleNewProject = () => {
     if (!window.confirm('Start a new project? This will clear all current data.')) return;
     dispatch({ type: 'reset' });
+    setGlobals(DEFAULT_GLOBALS);
     setShowResults(false);
   };
+
+  const handleSave = useCallback(() => {
+    downloadProject({ globals, rooms, openings });
+  }, [globals, rooms, openings]);
+
+  const handleOpen = async (file: File) => {
+    try {
+      const data = parseProject(await file.text());
+      if (rooms.length > 0 && !window.confirm(`Open "${file.name}"? Unsaved changes to the current project will be lost.`)) {
+        return;
+      }
+      dispatch({ type: 'load', rooms: data.rooms, openings: data.openings });
+      setGlobals(data.globals);
+      setShowResults(false);
+    } catch (e) {
+      window.alert(`Could not open "${file.name}": ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  // Keep a copy of the project in the browser so a reload doesn't lose work.
+  useEffect(() => {
+    writeAutosave({ globals, rooms, openings });
+  }, [globals, rooms, openings]);
+
+  // ⌘S / Ctrl+S saves to a file instead of saving the web page.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleSave]);
 
   const handleCalculate = () => {
     if (!hasHeatedRoom) {
@@ -102,7 +143,7 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <Header onNewProject={handleNewProject} />
+      <Header onNewProject={handleNewProject} onSave={handleSave} onOpen={handleOpen} />
 
       <div className="main-content">
         <MobileToolbar

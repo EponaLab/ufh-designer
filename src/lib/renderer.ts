@@ -1,6 +1,7 @@
 import { SCALE } from '../constants';
-import type { Opening, Room, Viewport } from '../types';
+import type { Opening, Point, Room, Viewport, WallSide } from '../types';
 import { isZone } from '../types';
+import { roomWallSegments } from './geometry';
 import { inwardNormal, openingInterval } from './openings';
 
 /** Room being drawn, in world px (grid-snapped). */
@@ -21,6 +22,8 @@ export interface Scene {
   selectedId: number | null;
   selectedOpeningId: number | null;
   preview: RoomPreview | null;
+  /** Existing nodes the pointer is currently snapped to (meters). */
+  snapMarkers: readonly Point[];
 }
 
 /** Canvas palette — monochrome, with a warm tint marking heated rooms and blue for glazing. */
@@ -33,6 +36,7 @@ const COLORS = {
   zoneFill: 'rgba(228, 228, 231, 0.35)',
   zoneFillSelected: 'rgba(212, 212, 216, 0.5)',
   border: '#27272a',
+  internalWall: '#c4c4cc',
   zoneBorder: '#a1a1aa',
   selected: '#09090b',
   previewFill: 'rgba(24, 24, 27, 0.04)',
@@ -54,9 +58,11 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): void {
   for (const room of scene.rooms) {
     drawRoom(ctx, room, room.id === scene.selectedId, vp.zoom);
   }
+  drawWalls(ctx, scene, vp.zoom);
   const selected = scene.rooms.find((r) => r.id === scene.selectedId);
   if (selected) drawResizeHandles(ctx, selected, vp.zoom);
   drawOpenings(ctx, scene, vp.zoom);
+  drawSnapMarkers(ctx, scene.snapMarkers, vp.zoom);
   if (scene.preview && scene.preview.endX !== undefined && scene.preview.endY !== undefined) {
     drawRoomPreview(ctx, scene.preview, vp.zoom);
   }
@@ -103,13 +109,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, room: Room, selected: boolean, 
   }
   ctx.fillRect(x, y, width, height);
 
-  // Border: solid for rooms, dashed for zones; heavier when selected
-  ctx.strokeStyle = selected ? COLORS.selected : zone ? COLORS.zoneBorder : COLORS.border;
-  ctx.lineWidth = (selected ? 2.5 : 1.5) / zoom;
-  if (zone) ctx.setLineDash([6 / zoom, 4 / zoom]);
-  ctx.strokeRect(x, y, width, height);
-  ctx.setLineDash([]);
-
   // Zones only show their temperature (an HTML chip centered in the zone).
   if (zone) return;
 
@@ -124,15 +123,69 @@ function drawRoom(ctx: CanvasRenderingContext2D, room: Room, selected: boolean, 
   ctx.font = `${12 / zoom}px ${FONT}`;
   ctx.fillText(`${area.toFixed(1)} m²`, x + width / 2, y + height / 2 - 2 / zoom);
 
-  // Dimensions
+  // Dimensions, drawn just inside the walls so adjacent rooms' labels never collide
+  const DIM_INSET = 12 / zoom;
   ctx.fillStyle = COLORS.textMuted;
   ctx.font = `${11 / zoom}px ${FONT}`;
-  ctx.fillText(`${room.width.toFixed(2)} m`, x + width / 2, y - 10 / zoom); // width (top)
+  ctx.fillText(`${room.width.toFixed(2)} m`, x + width / 2, y + DIM_INSET); // width (along the top wall)
   ctx.save();
-  ctx.translate(x - 10 / zoom, y + height / 2); // height (left)
+  ctx.translate(x + DIM_INSET, y + height / 2); // height (along the left wall)
   ctx.rotate(-Math.PI / 2);
   ctx.fillText(`${room.height.toFixed(2)} m`, 0, 0);
   ctx.restore();
+}
+
+/** Segment of a room side in world px. */
+function strokeSegment(ctx: CanvasRenderingContext2D, side: WallSide, at: number, from: number, to: number): void {
+  ctx.beginPath();
+  if (side === 'north' || side === 'south') {
+    ctx.moveTo(from * SCALE, at * SCALE);
+    ctx.lineTo(to * SCALE, at * SCALE);
+  } else {
+    ctx.moveTo(at * SCALE, from * SCALE);
+    ctx.lineTo(at * SCALE, to * SCALE);
+  }
+  ctx.stroke();
+}
+
+/**
+ * Walls of all rooms: parts shared with a neighbour (internal walls) are drawn light,
+ * outside walls dark (dashed grey for zones). The selected room gets a heavy outline on top.
+ */
+function drawWalls(ctx: CanvasRenderingContext2D, scene: Scene, zoom: number): void {
+  const lines = scene.rooms.map((room) => ({ room, segments: roomWallSegments(room, scene.rooms) }));
+  const atOf = (room: Room, side: WallSide) =>
+    side === 'north' ? room.y : side === 'south' ? room.y + room.height : side === 'west' ? room.x : room.x + room.width;
+
+  ctx.lineCap = 'square';
+
+  // Internal walls first, so outside walls and corners stay crisp on top.
+  ctx.strokeStyle = COLORS.internalWall;
+  ctx.lineWidth = 1.25 / zoom;
+  for (const { room, segments } of lines) {
+    for (const s of segments) {
+      if (s.neighborId !== null) strokeSegment(ctx, s.side, atOf(room, s.side), s.from, s.to);
+    }
+  }
+
+  for (const { room, segments } of lines) {
+    const zone = isZone(room);
+    ctx.strokeStyle = zone ? COLORS.zoneBorder : COLORS.border;
+    ctx.lineWidth = 1.5 / zoom;
+    if (zone) ctx.setLineDash([6 / zoom, 4 / zoom]);
+    for (const s of segments) {
+      if (s.neighborId === null) strokeSegment(ctx, s.side, atOf(room, s.side), s.from, s.to);
+    }
+    ctx.setLineDash([]);
+  }
+
+  const selected = scene.rooms.find((r) => r.id === scene.selectedId);
+  if (selected) {
+    ctx.strokeStyle = COLORS.selected;
+    ctx.lineWidth = 2.5 / zoom;
+    ctx.strokeRect(selected.x * SCALE, selected.y * SCALE, selected.width * SCALE, selected.height * SCALE);
+  }
+  ctx.lineCap = 'butt';
 }
 
 /** Small square handles on the corners and edge midpoints of the selected room. */
@@ -232,7 +285,8 @@ function drawOpeningDimensions(
   p: (along: number, inward?: number) => { x: number; y: number },
   zoom: number,
 ): void {
-  const inset = 16 / zoom;
+  // Inside the room, beyond the room's own dimension labels (12 px from the wall).
+  const inset = 28 / zoom;
   ctx.fillStyle = COLORS.selected;
   ctx.font = `600 ${11 / zoom}px ${FONT}`;
   ctx.textAlign = 'center';
@@ -257,6 +311,25 @@ function drawOpeningDimensions(
     ctx.lineTo(e.x, e.y);
   }
   ctx.stroke();
+}
+
+/** Ring on every node the pointer snapped to. */
+function drawSnapMarkers(ctx: CanvasRenderingContext2D, markers: readonly Point[], zoom: number): void {
+  for (const m of markers) {
+    const x = m.x * SCALE;
+    const y = m.y * SCALE;
+    ctx.beginPath();
+    ctx.arc(x, y, 7 / zoom, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fill();
+    ctx.strokeStyle = COLORS.selected;
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 2.5 / zoom, 0, Math.PI * 2);
+    ctx.fillStyle = COLORS.selected;
+    ctx.fill();
+  }
 }
 
 function drawRoomPreview(ctx: CanvasRenderingContext2D, preview: RoomPreview, zoom: number): void {

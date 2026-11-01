@@ -1,15 +1,19 @@
 // Shared domain types for the UFH Designer.
 
-export type Tool = 'select' | 'room' | 'zone' | 'window' | 'door';
+export type Tool = 'select' | 'pan' | 'room' | 'zone' | 'window' | 'door';
 
 export type RoomType = 'room' | 'zone';
 
-export type FloorMaterial = 'concrete' | 'tile' | 'wood' | 'carpet';
+/** Top layer of the floor (visible covering). */
+export type FloorMaterial = 'tile' | 'wood';
+/** What the floor rests on / what lies below it. */
 export type FloorBelow = 'ground' | 'heated' | 'unheated';
+/** Load-bearing floor structure under the heating system. */
+export type FloorStructure = 'concrete' | 'wood-beams';
 export type CeilingMaterial = 'concrete' | 'plaster' | 'wood';
 export type CeilingAbove = 'heated' | 'unheated' | 'outdoor';
 export type InstallationType = 'wet' | 'overlay-aluminum' | 'overlay-grooved' | 'overlay-basic';
-export type InsulationThickness = 0 | 10 | 20 | 30 | 50;
+export type InsulationThickness = 0 | 10 | 20 | 30 | 50 | 80 | 100;
 export type PipeSpacing = 100 | 150 | 200 | 300;
 
 /** Per-room thermal / UFH configuration. */
@@ -17,13 +21,16 @@ export interface RoomSettings {
   indoorTemp: number;
   /** Floor-to-ceiling height, meters. */
   ceilingHeight: number;
+  // Floor layers, bottom to top: what is below → structure → insulation → heating system → covering.
+  floorBelow: FloorBelow;
+  floorStructure: FloorStructure;
+  /** Insulation under the heating system, millimeters (0 = none). */
+  insulationBelow: InsulationThickness;
+  installationType: InstallationType;
+  pipeSpacing: PipeSpacing;
   floorMaterial: FloorMaterial;
   /** Floor covering thickness, millimeters. */
   floorThickness: number;
-  floorBelow: FloorBelow;
-  installationType: InstallationType;
-  insulationBelow: InsulationThickness;
-  pipeSpacing: PipeSpacing;
   ceilingMaterial: CeilingMaterial;
   ceilingAbove: CeilingAbove;
 }
@@ -44,6 +51,8 @@ export interface GlobalSettings {
   outdoorTemp: number;
   /** Default ceiling height applied to newly drawn rooms, meters. */
   roomHeight: number;
+  /** U-value of all external walls, W/m²K. */
+  wallU: number;
   gridSize: number;
 }
 

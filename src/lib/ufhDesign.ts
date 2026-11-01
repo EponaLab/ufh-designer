@@ -2,25 +2,24 @@
  * Underfloor heating hydraulic design (simplified EN 1264 approach).
  *
  *  1. Each heated room needs an upward heat flux q = Q / A (W/m²).
- *  2. The floor construction gives a heat transfer coefficient K (W/m²K) from the water
- *     to the room; per metre of pipe that is K' = K · spacing. With the loop length
- *     L = A / spacing the emitted heat is  Q = K' · L · ΔT_ln, where ΔT_ln is the
- *     logarithmic mean of (supply − room) and (return − room).
- *  3. The design supply temperature is set by the most demanding room at the design
+ *  2. The layers above the pipes (system build-up + covering, see floor.ts) give a heat
+ *     transfer coefficient K (W/m²K) from the water to the room; per metre of pipe that is
+ *     K' = K · spacing. With the loop length L = A / spacing the emitted heat is
+ *     Q = K' · L · ΔT_ln, where ΔT_ln is the logarithmic mean of (supply − room) and
+ *     (return − room).
+ *  3. The same water also loses heat downward through insulation, structure and what is
+ *     below. That heat is not useful for the room: it adds to the water heat and flow, but
+ *     not to the temperatures needed for the room.
+ *  4. The design supply temperature is set by the most demanding room at the design
  *     spread σ = supply − return (5 K), and is shared by all loops.
- *  4. Every other room gets its own return temperature (and flow) from the shared supply,
+ *  5. Every other room gets its own return temperature (and flow) from the shared supply,
  *     its heat loss and its loop length.
- *  5. The floor surface temperature follows the EN 1264 base characteristic
+ *  6. The floor surface temperature follows the EN 1264 base characteristic
  *     q = 8.92 · (θF − θi)^1.1 and is checked against the comfort limit.
  */
-import {
-  floorCoveringResistance,
-  INSULATION_FACTORS,
-  PIPE_SPACING_FACTORS,
-  SURFACE_RESISTANCE,
-  UFH_SYSTEMS,
-} from '../constants';
+import { PIPE_SPACING_FACTORS, UFH_SYSTEMS } from '../constants';
 import type { Room } from '../types';
+import { resistanceDown, resistanceUp } from './floor';
 
 /** Design temperature spread of the most demanding loop, K. */
 export const DESIGN_SPREAD = 5;
@@ -33,16 +32,11 @@ const SUPPLY_STEP = 0.5;
 /** Volumetric heat capacity of water, Wh/(l·K). */
 const WATER_HEAT_CAPACITY = 1.163;
 
-/** Water-to-room heat transfer of the floor construction and the share emitted upward. */
-export function floorCoefficient(room: Room): { k: number; upwardShare: number } {
+/** Water-to-room heat transfer coefficient K of the layers above the pipes, W/m²K. */
+export function upwardCoefficient(room: Room): number {
   const system = UFH_SYSTEMS[room.installationType];
-  const resistanceUp =
-    floorCoveringResistance(room.floorMaterial, room.floorThickness) + system.resistanceAbovePipes + SURFACE_RESISTANCE;
   const spacingFactor = PIPE_SPACING_FACTORS[room.pipeSpacing] ?? 1;
-  const upwardShare = room.installationType.startsWith('overlay')
-    ? 1 - system.downwardLossFactor * (INSULATION_FACTORS[room.insulationBelow] ?? 1)
-    : 1;
-  return { k: (spacingFactor * system.spacingEffectiveness * upwardShare) / resistanceUp, upwardShare };
+  return (spacingFactor * system.spacingEffectiveness) / resistanceUp(room);
 }
 
 /** Floor surface temperature for an upward heat flux q (EN 1264 base characteristic). */
@@ -86,8 +80,12 @@ export function returnForLogMean(d: number, supply: number, roomTemp: number): n
 export interface RoomHydraulics {
   /** Upward heat flux needed, W/m². */
   q: number;
-  /** Heat the water must deliver (incl. downward losses), W. */
+  /** Heat the water must deliver (upward + downward), W. */
   waterHeat: number;
+  /** Part of the water heat that flows down through the floor build-up, W. */
+  downwardHeat: number;
+  /** downwardHeat / waterHeat. */
+  downwardShare: number;
   /** Pipe length laid in the room, m. */
   pipeLength: number;
   loops: number;
@@ -106,18 +104,24 @@ export interface RoomHydraulics {
 }
 
 /** Per-room demand figures that don't depend on the shared supply temperature. */
-export function roomDemand(room: Room, heatLoss: number) {
+export function roomDemand(room: Room, heatLoss: number, belowTemp: number) {
   const area = room.width * room.height;
   const spacing = room.pipeSpacing / 1000;
   const pipeLength = area / spacing;
-  const { k, upwardShare } = floorCoefficient(room);
+  const k = upwardCoefficient(room);
   const q = Math.max(0, heatLoss) / area;
   // Q = K' · L · ΔT_ln with K' = K · spacing (W/mK) → ΔT_ln = Q / (K' · L)
   const kPerMetre = k * spacing;
   const logMean = pipeLength > 0 ? (q * area) / (kPerMetre * pipeLength) : 0;
+  // Heat that also leaves the pipes downward, through insulation, structure and what is below.
+  const qDown = Math.max(0, room.indoorTemp + logMean - belowTemp) / resistanceDown(room);
+  const downwardHeat = qDown * area;
+  const waterHeat = q * area + downwardHeat;
   return {
     q,
-    waterHeat: (q * area) / upwardShare,
+    waterHeat,
+    downwardHeat,
+    downwardShare: waterHeat > 0 ? downwardHeat / waterHeat : 0,
     pipeLength,
     loops: Math.max(1, Math.ceil(pipeLength / MAX_LOOP_LENGTH)),
     logMeanDelta: logMean,

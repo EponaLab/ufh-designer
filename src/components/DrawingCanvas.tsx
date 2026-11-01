@@ -3,15 +3,20 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { MIN_ROOM_SIZE, SCALE } from '../constants';
 import {
   clampZoom,
+  coincidentNodes,
   findRoomAt,
   handleToSide,
   hitResizeHandle,
+  NODE_SNAP_TOLERANCE_PX,
   RESIZE_CURSORS,
+  rectCorners,
+  rectNodes,
   resizeRect,
   screenToMeters,
   setSideLength,
   snapMeters,
-  snapScreenToWorldGrid,
+  snapSpan,
+  snapToCoords,
   zoomAt,
   type ResizeHandle,
   type Side,
@@ -44,7 +49,8 @@ interface DrawingCanvasProps {
 }
 
 const STATUS_TEXT: Record<Tool, string> = {
-  select: 'Click to select · drag to move · drag edges to resize · double-click a side to type its length',
+  select: 'Click to select · drag to move · drag edges to resize · double-click a side to type its length · Space+drag to pan',
+  pan: 'Drag to pan · scroll to zoom',
   room: 'Click and drag to create a heated room (with UFH)',
   zone: 'Click and drag to create an unheated zone (no UFH)',
   window: 'Click on a room side to add a window',
@@ -99,6 +105,10 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
   const openingDragRef = useRef<OpeningDragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
   const panRef = useRef<Point | null>(null);
+  /** Existing nodes the pointer is currently snapped to (shown as rings). */
+  const markersRef = useRef<Point[]>([]);
+  /** Space bar held: left-drag pans in any tool. */
+  const spaceHeldRef = useRef(false);
   const touchRef = useRef<TouchState>({ touches: [], lastDistance: 0 });
   /** Last single-finger tap, for double-tap detection. */
   const lastTapRef = useRef<{ time: number; point: Point } | null>(null);
@@ -124,6 +134,7 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
       selectedId: p.selectedId,
       selectedOpeningId: p.selectedOpeningId,
       preview: previewRef.current,
+      snapMarkers: markersRef.current,
     });
   }, []); // reads only refs, so it can stay stable
 
@@ -151,6 +162,7 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
   // Switching tools cancels any room being drawn and resets the hover cursor.
   useEffect(() => {
     previewRef.current = null;
+    markersRef.current = [];
     setLengthEdit(null);
     if (canvasRef.current) canvasRef.current.style.cursor = '';
     redraw();
@@ -187,9 +199,48 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
       return hitOpening(openings, new Map(rooms.map((r) => [r.id, r])), screenToMeters(p, viewport), tolerance);
     };
 
+    /**
+     * Snapping at the current zoom: a node's coordinate (corner of another room) within a few
+     * pixels wins over the grid. `excludeId` leaves out the room being moved or resized.
+     */
+    const snapper = (excludeId?: number) => {
+      const { rooms, viewport, gridSize } = propsRef.current;
+      const nodes = rectNodes(rooms.filter((r) => r.id !== excludeId));
+      const tol = NODE_SNAP_TOLERANCE_PX / (SCALE * viewport.zoom);
+      const xs = nodes.map((n) => n.x);
+      const ys = nodes.map((n) => n.y);
+      return {
+        nodes,
+        xs,
+        ys,
+        tol,
+        x: (v: number) => snapToCoords(v, xs, tol) ?? snapMeters(v, gridSize),
+        y: (v: number) => snapToCoords(v, ys, tol) ?? snapMeters(v, gridSize),
+      };
+    };
+    /** Mark the nodes that `points` coincide with. */
+    const setMarkers = (nodes: Point[], points: Point[]) => {
+      markersRef.current = coincidentNodes(nodes, points);
+    };
+
     /** Cursor feedback: resize arrows on edges, move over rooms/openings, copy where an opening can go. */
     const updateHoverCursor = (p: Point) => {
       const { tool, viewport, rooms } = propsRef.current;
+      if (isRoomTool(tool) && !spaceHeldRef.current) {
+        // Show the node the next click would snap to.
+        const s = snapper();
+        const m = screenToMeters(p, viewport);
+        const had = markersRef.current.length > 0;
+        setMarkers(s.nodes, [{ x: s.x(m.x), y: s.y(m.y) }]);
+        if (had || markersRef.current.length > 0) redraw();
+      } else if (markersRef.current.length > 0) {
+        markersRef.current = [];
+        redraw();
+      }
+      if (tool === 'pan' || spaceHeldRef.current) {
+        canvas.style.cursor = 'grab';
+        return;
+      }
       if (isOpeningTool(tool)) {
         canvas.style.cursor = findResizeTarget(p, false) ? 'copy' : 'not-allowed';
         return;
@@ -208,10 +259,12 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
     };
 
     const pointerDown = (p: Point, button: number, touch = false) => {
-      const { tool, viewport, gridSize, rooms, onSelect, onSelectOpening, onAddOpening } = propsRef.current;
+      const { tool, viewport, rooms, onSelect, onSelectOpening, onAddOpening } = propsRef.current;
 
-      if (button === 1) {
-        panRef.current = p; // middle button pans
+      // Pan: middle button, the Pan tool, or Space held down with any tool.
+      if (button === 1 || (button === 0 && (tool === 'pan' || spaceHeldRef.current))) {
+        panRef.current = p;
+        canvas.style.cursor = 'grabbing';
         return;
       }
       if (button !== 0) return;
@@ -247,10 +300,14 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
           onSelect(null);
         }
       } else if (isRoomTool(tool)) {
-        const s = snapScreenToWorldGrid(p, viewport, gridSize);
-        // Rooms can't be started inside another room.
-        if (!isInsideAny({ x: s.x / SCALE, y: s.y / SCALE }, rooms)) {
-          previewRef.current = { startX: s.x, startY: s.y };
+        // Start point: a node's coordinates win over the grid. Rooms can't start inside another room.
+        const s = snapper();
+        const m = screenToMeters(p, viewport);
+        const start = { x: s.x(m.x), y: s.y(m.y) };
+        if (!isInsideAny(start, rooms)) {
+          previewRef.current = { startX: start.x * SCALE, startY: start.y * SCALE };
+          setMarkers(s.nodes, [start]);
+          redraw();
         }
       } else if (isOpeningTool(tool)) {
         // Place on the nearest room side under the pointer (selected room first on shared walls).
@@ -274,7 +331,10 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
         width: Math.abs(end.x - start.x),
         height: Math.abs(end.y - start.y),
       };
-      return clampResize({ ...start, width: 0, height: 0 }, proposed, handle, propsRef.current.rooms);
+      const rect = clampResize({ ...start, width: 0, height: 0 }, proposed, handle, propsRef.current.rooms);
+      // Round away float noise from snapping so corners match neighbours exactly.
+      const clean = (v: number) => Math.round(v * 1e6) / 1e6;
+      return rect && { x: clean(rect.x), y: clean(rect.y), width: clean(rect.width), height: clean(rect.height) };
     };
 
     const othersThan = (id: number) => propsRef.current.rooms.filter((r) => r.id !== id);
@@ -294,16 +354,21 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
 
       const preview = previewRef.current;
       if (isRoomTool(tool) && preview) {
-        const rect = constrainedNewRoom(preview, snapScreenToWorldGrid(p, viewport, gridSize));
+        // End point: a node's coordinates win over the grid.
+        const s = snapper();
+        const m = screenToMeters(p, viewport);
+        const rect = constrainedNewRoom(preview, { x: s.x(m.x) * SCALE, y: s.y(m.y) * SCALE });
         if (rect) {
           // The start point is always a corner of the constrained rectangle; preview the opposite one.
           const sx = preview.startX / SCALE;
           const sy = preview.startY / SCALE;
           preview.endX = (Math.abs(rect.x - sx) < 1e-9 ? rect.x + rect.width : rect.x) * SCALE;
           preview.endY = (Math.abs(rect.y - sy) < 1e-9 ? rect.y + rect.height : rect.y) * SCALE;
+          setMarkers(s.nodes, rectCorners(rect));
         } else {
           preview.endX = undefined;
           preview.endY = undefined;
+          markersRef.current = [];
         }
         redraw();
       } else if (openingDragRef.current) {
@@ -319,38 +384,55 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
         }
       } else if (resizeRef.current) {
         const { id, handle, original } = resizeRef.current;
-        const proposed = resizeRect(original, handle, screenToMeters(p, viewport), gridSize, MIN_ROOM_SIZE);
+        const s = snapper(id);
+        const proposed = resizeRect(original, handle, screenToMeters(p, viewport), s, MIN_ROOM_SIZE);
         const rect = clampResize(original, proposed, handle, othersThan(id));
-        if (rect) onResizeRoom(id, rect);
+        if (rect) {
+          setMarkers(s.nodes, rectCorners(rect));
+          onResizeRoom(id, rect);
+        }
       } else if (dragRef.current) {
         const drag = dragRef.current;
         const room = propsRef.current.rooms.find((r) => r.id === drag.id);
-        const m = screenToMeters(p, viewport);
-        const desired = { x: snapMeters(m.x - drag.offsetX, gridSize), y: snapMeters(m.y - drag.offsetY, gridSize) };
-        // Never overlap: a colliding position snaps flush to the neighbour's wall.
-        const pos = room ? findFreePosition(room, desired, othersThan(drag.id)) : null;
-        if (pos) onMoveRoom(drag.id, pos.x, pos.y);
+        if (room) {
+          // Near or far edges align with other rooms' corner coordinates, otherwise the grid.
+          const s = snapper(drag.id);
+          const m = screenToMeters(p, viewport);
+          const desired = {
+            x: snapSpan(m.x - drag.offsetX, room.width, s.xs, s.tol, gridSize),
+            y: snapSpan(m.y - drag.offsetY, room.height, s.ys, s.tol, gridSize),
+          };
+          // Never overlap: a colliding position snaps flush to the neighbour's wall.
+          const pos = findFreePosition(room, desired, othersThan(drag.id));
+          if (pos) {
+            setMarkers(s.nodes, rectCorners({ ...pos, width: room.width, height: room.height }));
+            onMoveRoom(drag.id, pos.x, pos.y);
+          }
+        }
       } else {
         updateHoverCursor(p);
       }
     };
 
     const pointerUp = (p: Point, button: number) => {
-      if (button === 1) {
+      if (panRef.current) {
         panRef.current = null;
+        updateHoverCursor(p);
         return;
       }
+      if (button === 1) return;
       if (button !== 0) return;
 
-      const { tool, viewport, gridSize, onCreateRoom } = propsRef.current;
+      const { tool, viewport, onCreateRoom } = propsRef.current;
       const preview = previewRef.current;
       if (isRoomTool(tool) && preview) {
-        const rect = constrainedNewRoom(preview, snapScreenToWorldGrid(p, viewport, gridSize));
+        const s = snapper();
+        const m = screenToMeters(p, viewport);
+        const rect = constrainedNewRoom(preview, { x: s.x(m.x) * SCALE, y: s.y(m.y) * SCALE });
         if (rect && rect.width >= MIN_ROOM_SIZE - 1e-9 && rect.height >= MIN_ROOM_SIZE - 1e-9) {
           onCreateRoom(tool, rect);
         }
         previewRef.current = null;
-        redraw();
       } else if (openingDragRef.current) {
         openingDragRef.current = null;
       } else if (resizeRef.current) {
@@ -358,6 +440,8 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
       } else if (dragRef.current) {
         dragRef.current = null;
       }
+      markersRef.current = [];
+      redraw();
     };
 
     // Mouse
@@ -393,6 +477,26 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
       const anchor = toLocal(e.clientX, e.clientY);
       const factor = e.deltaY < 0 ? 1.1 : 0.9;
       propsRef.current.setViewport((v) => zoomAt(v, anchor, factor));
+    };
+
+    // Hold Space to pan with the left mouse button (ignored while typing in a field).
+    const isTyping = (t: EventTarget | null) =>
+      t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName));
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || isTyping(e.target)) return;
+      e.preventDefault(); // don't scroll or press a focused button
+      if (!spaceHeldRef.current) {
+        spaceHeldRef.current = true;
+        if (!panRef.current) canvas.style.cursor = 'grab';
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || !spaceHeldRef.current) return;
+      spaceHeldRef.current = false;
+      if (!panRef.current) canvas.style.cursor = '';
+    };
+    const onBlur = () => {
+      spaceHeldRef.current = false;
     };
 
     // Touch: one finger behaves like the left mouse button, two fingers pan/zoom.
@@ -467,6 +571,9 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
     const passiveFalse = { passive: false } as const;
     canvas.addEventListener('mousedown', onMouseDown);
     canvas.addEventListener('dblclick', onDoubleClick);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     canvas.addEventListener('wheel', onWheel, passiveFalse);
@@ -476,6 +583,9 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
     return () => {
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('dblclick', onDoubleClick);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       canvas.removeEventListener('wheel', onWheel);

@@ -1,17 +1,22 @@
 import {
   CEILING_MATERIALS,
-  DEFAULT_WALL_U,
-  FLOOR_MATERIALS,
+  INTERNAL_WALL_U,
   MAX_FLOOR_TEMP,
   OPENING_LABEL,
 } from '../constants';
-import type { GlobalSettings, Opening, Room, WallSide } from '../types';
+import type { FloorBelow, GlobalSettings, Opening, Room, WallSide } from '../types';
 import { isZone } from '../types';
+import { floorU } from './floor';
 import { roomWallSegments } from './geometry';
 import { openingInterval } from './openings';
 import { designSupply, MAX_SUPPLY_TEMP, roomDemand, roomHydraulics, type RoomHydraulics } from './ufhDesign';
 
 const SIDE_LABEL: Record<WallSide, string> = { north: 'N', east: 'E', south: 'S', west: 'W' };
+const FLOOR_BREAKDOWN_NAME: Record<FloorBelow, string> = {
+  ground: 'Floor (ground)',
+  heated: 'Floor (other floor)',
+  unheated: 'Floor (unheated space)',
+};
 const OPPOSITE_SIDE: Record<WallSide, WallSide> = { north: 'south', south: 'north', east: 'west', west: 'east' };
 
 export interface BreakdownItem {
@@ -106,7 +111,7 @@ export function calculateProject(
     // Walls: each segment of a side faces either outside or one neighbour. Openings in a
     // segment (this room's, or the neighbour's on the same shared wall) are removed from
     // the wall area and lose heat with the segment's ΔT. Q = U · A · ΔT.
-    const wallGroups = new Map<string, { name: string; area: number; deltaT: number }>();
+    const wallGroups = new Map<string, { name: string; area: number; deltaT: number; internal: boolean }>();
     const openingGroups = new Map<string, { name: string; area: number; deltaT: number; uValue: number }>();
 
     for (const seg of roomWallSegments(room, rooms)) {
@@ -144,6 +149,7 @@ export function calculateProject(
       const group = wallGroups.get(key) ?? {
         name: neighbor ? `Wall to ${neighbor.name}` : `External Wall (${SIDE_LABEL[seg.side]})`,
         area: 0,
+        internal: neighbor !== undefined,
         deltaT,
       };
       group.area += Math.max(0, seg.length * room.ceilingHeight - openingArea);
@@ -155,21 +161,23 @@ export function calculateProject(
       roomTotalLoss += loss;
       if (loss > 0.1) breakdown.push({ roomId: room.id, room: room.name, name, area, uValue, deltaT, loss });
     };
-    for (const { name, area, deltaT } of wallGroups.values()) addLoss(name, area, DEFAULT_WALL_U, deltaT);
+    for (const { name, area, deltaT, internal } of wallGroups.values()) {
+      addLoss(name, area, internal ? INTERNAL_WALL_U : globals.wallU, deltaT);
+    }
     for (const { name, area, uValue, deltaT } of openingGroups.values()) addLoss(name, area, uValue, deltaT);
 
-    // Floor
-    const floorU = FLOOR_MATERIALS[room.floorMaterial].u;
+    // Floor: U of the complete layered build-up towards what is below
+    const floorUValue = floorU(room);
     const fDeltaT = floorDeltaT(room, outdoorTemp);
-    const floorLoss = roomArea * floorU * fDeltaT;
+    const floorLoss = roomArea * floorUValue * fDeltaT;
     if (floorLoss > 0) {
       roomTotalLoss += floorLoss;
       breakdown.push({
         roomId: room.id,
         room: room.name,
-        name: `Floor (${room.floorBelow})`,
+        name: FLOOR_BREAKDOWN_NAME[room.floorBelow],
         area: roomArea,
-        uValue: floorU,
+        uValue: floorUValue,
         deltaT: fDeltaT,
         loss: floorLoss,
       });
@@ -193,7 +201,9 @@ export function calculateProject(
     }
 
     totalLoss += roomTotalLoss;
-    demands.push({ room, loss: roomTotalLoss, demand: roomDemand(room, roomTotalLoss) });
+    // Temperature of whatever is below the floor (same convention as the floor ΔT above).
+    const belowTemp = room.indoorTemp - fDeltaT;
+    demands.push({ room, loss: roomTotalLoss, demand: roomDemand(room, roomTotalLoss, belowTemp) });
   }
 
   // Shared design supply: set by the most demanding loop at the design spread.

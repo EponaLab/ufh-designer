@@ -3,6 +3,7 @@ import type {
   CeilingMaterial,
   FloorBelow,
   FloorMaterial,
+  FloorStructure,
   GlobalSettings,
   InstallationType,
   InsulationThickness,
@@ -24,8 +25,10 @@ export const MAX_ZOOM = 5.0;
 export const MAX_FLOOR_TEMP = 29;
 /** Combined surface heat transfer resistance (≈10.8 W/m²K), m²K/W. */
 export const SURFACE_RESISTANCE = 0.093;
-/** Default wall U-value used in calculations (brick), W/m²K. */
+/** Default U-value of external walls (brick), W/m²K — editable per project. */
 export const DEFAULT_WALL_U = 0.5;
+/** U-value of walls between rooms / to zones, W/m²K (not editable). */
+export const INTERNAL_WALL_U = 0.5;
 /** Minimum room size when drawing, meters. */
 export const MIN_ROOM_SIZE = 1;
 
@@ -49,6 +52,7 @@ export const INITIAL_VIEWPORT: Viewport = { panX: 280, panY: 60, zoom: 1.0 };
 export const DEFAULT_GLOBALS: GlobalSettings = {
   outdoorTemp: -10,
   roomHeight: 2.7,
+  wallU: DEFAULT_WALL_U,
   gridSize: 0.5,
 };
 
@@ -56,12 +60,13 @@ export function defaultRoomSettings(type: RoomType, ceilingHeight = DEFAULT_GLOB
   return {
     indoorTemp: type === 'zone' ? 15 : 20, // Zones default to 15°C (unheated)
     ceilingHeight,
+    floorBelow: 'ground',
+    floorStructure: 'concrete',
+    insulationBelow: 20,
+    installationType: 'wet',
+    pipeSpacing: 150,
     floorMaterial: 'tile',
     floorThickness: FLOOR_MATERIALS.tile.defaultThickness,
-    floorBelow: 'ground',
-    installationType: 'wet',
-    insulationBelow: 20,
-    pipeSpacing: 150,
     ceilingMaterial: 'plaster',
     ceilingAbove: 'heated',
   };
@@ -77,25 +82,37 @@ export const WALL_MATERIALS = {
 
 export interface FloorMaterialProps {
   name: string;
-  /** U-value of the floor construction for heat loss downwards, W/m²K. */
-  u: number;
   /** Thermal conductivity λ of the floor covering, W/mK. */
   conductivity: number;
-  /** Typical covering thickness, mm. Defaults reproduce the previous fixed resistances. */
+  /** Typical covering thickness, mm. */
   defaultThickness: number;
 }
 
+/** Top layer. Tiles R = 0.01 and wood R = 0.10 m²K/W at their default thickness. */
 export const FLOOR_MATERIALS: Record<FloorMaterial, FloorMaterialProps> = {
-  concrete: { name: 'Concrete Slab', u: 0.7, conductivity: 1.4, defaultThickness: 70 }, // R 0.05
-  tile: { name: 'Tile on Concrete', u: 0.8, conductivity: 1.0, defaultThickness: 10 }, // R 0.01
-  wood: { name: 'Wood Flooring', u: 0.5, conductivity: 0.15, defaultThickness: 15 }, // R 0.10
-  carpet: { name: 'Carpet', u: 0.3, conductivity: 0.06, defaultThickness: 9 }, // R 0.15
+  tile: { name: 'Tiles', conductivity: 1.0, defaultThickness: 10 },
+  wood: { name: 'Wood', conductivity: 0.15, defaultThickness: 15 },
 };
 
 /** Thermal resistance of the floor covering, m²K/W (R = d / λ). */
 export function floorCoveringResistance(material: FloorMaterial, thicknessMm: number): number {
   return thicknessMm / 1000 / FLOOR_MATERIALS[material].conductivity;
 }
+
+/** Resistance of the load-bearing structure under the heating system, m²K/W. */
+export const FLOOR_STRUCTURES: Record<FloorStructure, { name: string; resistance: number }> = {
+  concrete: { name: 'Concrete slab (≈200 mm)', resistance: 0.15 },
+  'wood-beams': { name: 'Wood beams (boards, cavity, ceiling)', resistance: 0.4 },
+};
+
+/** Conductivity of the insulation layer, W/mK (typical EPS/PIR board). */
+export const INSULATION_CONDUCTIVITY = 0.035;
+/** Resistance of the floor's inner surface for downward heat flow, m²K/W. */
+export const SURFACE_RESISTANCE_DOWN = 0.17;
+/** Equivalent resistance of the ground below a slab (simplified, EN ISO 13370-style), m²K/W. */
+export const GROUND_RESISTANCE = 1.0;
+/** Surface resistance on the underside facing another (heated or unheated) space, m²K/W. */
+export const BELOW_SPACE_RESISTANCE = 0.17;
 
 export const FLOOR_THICKNESS_MIN = 1;
 export const FLOOR_THICKNESS_MAX = 100;
@@ -121,45 +138,32 @@ export const PIPE_SPACING_FACTORS: Record<PipeSpacing, number> = {
 
 export interface UFHSystemProps {
   name: string;
+  /** Resistance between the pipes and the floor covering, m²K/W. */
   resistanceAbovePipes: number;
-  downwardLossFactor: number;
   spacingEffectiveness: number;
 }
 
 export const UFH_SYSTEMS: Record<InstallationType, UFHSystemProps> = {
   wet: {
-    name: 'Wet System (Screed/Concrete)',
+    name: 'Screed (wet system)',
     resistanceAbovePipes: 0.045,
-    downwardLossFactor: 0.05,
     spacingEffectiveness: 1.0,
   },
   'overlay-aluminum': {
     name: 'Overlay - Aluminum Spreader Plates',
     resistanceAbovePipes: 0.012,
-    downwardLossFactor: 0.25,
     spacingEffectiveness: 0.9,
   },
   'overlay-grooved': {
     name: 'Overlay - Grooved Panels',
     resistanceAbovePipes: 0.018,
-    downwardLossFactor: 0.3,
     spacingEffectiveness: 0.85,
   },
   'overlay-basic': {
     name: 'Overlay - Basic (No Plates)',
     resistanceAbovePipes: 0.025,
-    downwardLossFactor: 0.35,
     spacingEffectiveness: 0.75,
   },
-};
-
-/** Fraction of downward loss remaining for a given insulation thickness. */
-export const INSULATION_FACTORS: Record<InsulationThickness, number> = {
-  0: 1.0,
-  10: 0.7,
-  20: 0.5,
-  30: 0.35,
-  50: 0.2,
 };
 
 // Select options shown in the UI
@@ -170,20 +174,23 @@ export interface Option<T> {
 }
 
 export const FLOOR_MATERIAL_OPTIONS: Option<FloorMaterial>[] = [
-  { value: 'concrete', label: 'Concrete' },
-  { value: 'tile', label: 'Tile' },
   { value: 'wood', label: 'Wood' },
-  { value: 'carpet', label: 'Carpet' },
+  { value: 'tile', label: 'Tiles' },
 ];
 
 export const FLOOR_BELOW_OPTIONS: Option<FloorBelow>[] = [
   { value: 'ground', label: 'Ground' },
-  { value: 'heated', label: 'Heated' },
-  { value: 'unheated', label: 'Unheated' },
+  { value: 'heated', label: 'Other floor' },
+  { value: 'unheated', label: 'Unheated space' },
+];
+
+export const FLOOR_STRUCTURE_OPTIONS: Option<FloorStructure>[] = [
+  { value: 'concrete', label: 'Concrete slab' },
+  { value: 'wood-beams', label: 'Wood beams' },
 ];
 
 export const INSTALLATION_OPTIONS: Option<InstallationType>[] = [
-  { value: 'wet', label: 'Wet (Screed)' },
+  { value: 'wet', label: 'Screed (wet)' },
   { value: 'overlay-aluminum', label: 'Overlay - Aluminum' },
   { value: 'overlay-grooved', label: 'Overlay - Grooved' },
   { value: 'overlay-basic', label: 'Overlay - Basic' },
@@ -191,10 +198,12 @@ export const INSTALLATION_OPTIONS: Option<InstallationType>[] = [
 
 export const INSULATION_OPTIONS: Option<InsulationThickness>[] = [
   { value: 0, label: 'None' },
-  { value: 10, label: '10mm' },
-  { value: 20, label: '20mm' },
-  { value: 30, label: '30mm' },
-  { value: 50, label: '50mm' },
+  { value: 10, label: '10 mm' },
+  { value: 20, label: '20 mm' },
+  { value: 30, label: '30 mm' },
+  { value: 50, label: '50 mm' },
+  { value: 80, label: '80 mm' },
+  { value: 100, label: '100 mm' },
 ];
 
 export const PIPE_SPACING_OPTIONS: Option<PipeSpacing>[] = [

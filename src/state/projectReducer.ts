@@ -24,6 +24,7 @@ export type ProjectAction =
   | { type: 'updateOpening'; id: number; patch: OpeningPatch }
   | { type: 'deleteOpening'; id: number }
   | { type: 'selectOpening'; id: number | null }
+  | { type: 'load'; rooms: Room[]; openings: Opening[] }
   | { type: 'reset' };
 
 export const initialProjectState: ProjectState = {
@@ -131,7 +132,20 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
       };
     case 'selectOpening':
       return { ...state, selectedOpeningId: action.id, selectedId: null };
+    case 'load':
+      return projectFromData(action.rooms, action.openings);
     case 'reset':
       return initialProjectState;
   }
+}
+
+/** State for a loaded project; id counters continue after the highest stored ids. */
+export function projectFromData(rooms: Room[], openings: Opening[]): ProjectState {
+  return {
+    ...initialProjectState,
+    rooms,
+    openings,
+    nextRoomId: Math.max(0, ...rooms.map((r) => r.id)) + 1,
+    nextOpeningId: Math.max(0, ...openings.map((o) => o.id)) + 1,
+  };
 }

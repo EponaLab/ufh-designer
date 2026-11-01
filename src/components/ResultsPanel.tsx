@@ -129,7 +129,7 @@ export function ResultsPanel({ results, selectedId, modal, onSelectRoom, onClose
                     <span>{item.loss.toFixed(0)} W</span>
                   </div>
                   <div className="breakdown-item-details">
-                    {item.area.toFixed(2)} m² · U {item.uValue} · ΔT {item.deltaT.toFixed(1)} K
+                    {item.area.toFixed(2)} m² · U {item.uValue.toFixed(2)} · ΔT {item.deltaT.toFixed(1)} K
                   </div>
                 </div>
               ))}

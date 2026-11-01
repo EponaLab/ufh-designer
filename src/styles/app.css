@@ -117,6 +117,11 @@ select {
     font-size: 15px;
 }
 
+.header-right {
+    display: flex;
+    gap: 6px;
+}
+
 .header h1 {
     font-size: 14px;
     font-weight: 600;
@@ -380,10 +385,10 @@ label {
 
 /* ---------------------------------------------------------------- Tool bar */
 
-/* Segmented tool switcher */
+/* Segmented tool switcher (3 × 2) */
 .tool-group {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 2px;
     padding: 2px;
     background: var(--muted);
@@ -462,10 +467,6 @@ label {
 .config-section .section-divider {
     grid-column: 1 / -1;
     margin: 0.25rem -0.75rem;
-}
-
-#overlayOptions {
-    display: contents;
 }
 
 .section-note {
@@ -1048,6 +1049,11 @@ label {
         height: 28px;
         padding: 0 0.6rem;
         font-size: 12px;
+    }
+
+    /* Icon-only header buttons on phones */
+    .header-right .btn span {
+        display: none;
     }
 
     #canvasStatus {

@@ -3,6 +3,7 @@ import {
   CEILING_MATERIAL_OPTIONS,
   FLOOR_BELOW_OPTIONS,
   FLOOR_MATERIAL_OPTIONS,
+  FLOOR_STRUCTURE_OPTIONS,
   FLOOR_THICKNESS_MAX,
   FLOOR_THICKNESS_MIN,
   floorMaterialPatch,
@@ -13,6 +14,7 @@ import {
   PIPE_SPACING_OPTIONS,
   type Option,
 } from '../constants';
+import { floorU } from '../lib/floor';
 import { clampOpening, sideLine } from '../lib/openings';
 import type { OpeningPatch } from '../state/projectReducer';
 import type { GlobalSettings, Opening, OpeningKind, Room, RoomSettings, WallSide } from '../types';
@@ -71,6 +73,15 @@ export function SettingsPanel(props: SettingsPanelProps) {
           min={2}
           onChange={(roomHeight) => onGlobalsChange({ roomHeight })}
         />
+        <label htmlFor="wallU2">Wall U (W/m²K)</label>
+        <NumberField
+          id="wallU2"
+          value={globals.wallU}
+          step={0.05}
+          min={0.05}
+          max={5}
+          onChange={(wallU) => onGlobalsChange({ wallU })}
+        />
         <label htmlFor="gridSize2">Grid (m)</label>
         <NumberField
           id="gridSize2"
@@ -123,8 +134,6 @@ interface RoomEditorProps {
 
 /** Full parameter editor for a heated room (zones only get a delete button). */
 function RoomEditor({ room, onChange, onDelete }: RoomEditorProps) {
-  const isOverlay = room.installationType.startsWith('overlay');
-
   return (
     <>
       {/* Identity */}
@@ -145,10 +154,51 @@ function RoomEditor({ room, onChange, onDelete }: RoomEditorProps) {
         {(room.width * room.height).toFixed(1)} m²
       </div>
 
-      {/* Floor */}
+      {/* Floor build-up, bottom to top */}
       <div className="config-section">
-        <h3>Floor</h3>
-        <label htmlFor="floorMaterial">Material</label>
+        <h3>Floor (bottom to top)</h3>
+
+        <label htmlFor="floorBelow">1. Below</label>
+        <SelectField
+          id="floorBelow"
+          value={room.floorBelow}
+          options={FLOOR_BELOW_OPTIONS}
+          onChange={(floorBelow) => onChange({ floorBelow })}
+        />
+
+        <label htmlFor="floorStructure">2. Structure</label>
+        <SelectField
+          id="floorStructure"
+          value={room.floorStructure}
+          options={FLOOR_STRUCTURE_OPTIONS}
+          onChange={(floorStructure) => onChange({ floorStructure })}
+        />
+
+        <label htmlFor="insulationBelow">Insulation</label>
+        <SelectField
+          id="insulationBelow"
+          value={room.insulationBelow}
+          options={INSULATION_OPTIONS}
+          onChange={(insulationBelow) => onChange({ insulationBelow })}
+        />
+
+        <label htmlFor="installationType">3. Heating system</label>
+        <SelectField
+          id="installationType"
+          value={room.installationType}
+          options={INSTALLATION_OPTIONS}
+          onChange={(installationType) => onChange({ installationType })}
+        />
+
+        <label htmlFor="pipeSpacing">Pipe spacing</label>
+        <SelectField
+          id="pipeSpacing"
+          value={room.pipeSpacing}
+          options={PIPE_SPACING_OPTIONS}
+          onChange={(pipeSpacing) => onChange({ pipeSpacing })}
+        />
+
+        <label htmlFor="floorMaterial">4. Top material</label>
         <SelectField
           id="floorMaterial"
           value={room.floorMaterial}
@@ -166,47 +216,10 @@ function RoomEditor({ room, onChange, onDelete }: RoomEditorProps) {
           onChange={(floorThickness) => onChange({ floorThickness })}
         />
 
-        <label htmlFor="floorBelow">Below</label>
-        <SelectField
-          id="floorBelow"
-          value={room.floorBelow}
-          options={FLOOR_BELOW_OPTIONS}
-          onChange={(floorBelow) => onChange({ floorBelow })}
-        />
-      </div>
-
-      {/* Underfloor heating */}
-      <div className="config-section">
-        <h3>Underfloor Heating</h3>
-        <label htmlFor="installationType">System</label>
-        <SelectField
-          id="installationType"
-          value={room.installationType}
-          options={INSTALLATION_OPTIONS}
-          onChange={(installationType) => onChange({ installationType })}
-        />
-
-        {isOverlay && (
-          <div id="overlayOptions">
-            <label htmlFor="insulationBelow">Insulation (mm)</label>
-            <SelectField
-              id="insulationBelow"
-              value={room.insulationBelow}
-              options={INSULATION_OPTIONS}
-              onChange={(insulationBelow) => onChange({ insulationBelow })}
-            />
-          </div>
-        )}
-
-        <label htmlFor="pipeSpacing">Pipe Spacing</label>
-        <SelectField
-          id="pipeSpacing"
-          value={room.pipeSpacing}
-          options={PIPE_SPACING_OPTIONS}
-          onChange={(pipeSpacing) => onChange({ pipeSpacing })}
-        />
-
-        <p className="section-note">Supply and return temperatures are calculated from the heat loss.</p>
+        <p className="section-note" id="floorUNote">
+          Floor U-value: <strong>{floorU(room).toFixed(2)} W/m²K</strong>. Supply and return temperatures are
+          calculated from the heat loss.
+        </p>
       </div>
 
       {/* Ceiling */}

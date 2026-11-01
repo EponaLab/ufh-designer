@@ -340,7 +340,7 @@ To verify calculations, run the test cases in TESTS.md against the live applicat
 
 ## Development
 
-The app is a React + TypeScript project built with Vite.
+The app is a React + TypeScript project built with Vite. It needs Node 22 (see `.nvmrc`).
 
 ```bash
 npm install
@@ -350,8 +350,15 @@ npm run build      # typecheck + production build into dist/
 npm run preview    # serve the production build
 ```
 
-Deployment to GitHub Pages runs from `.github/workflows/deploy.yml` on every push to `main`
-(Pages source must be set to "GitHub Actions" in the repository settings).
+### Deployment
+
+`.github/workflows/deploy.yml` typechecks and builds the app, and publishes `dist/` to GitHub Pages:
+
+- **Pull requests:** build only (no deployment), so type errors are caught before merging.
+- **Push to `main`** (or a manual run from the Actions tab): build, then deploy.
+
+One-time setup: in the repository, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
+The site is served from `https://<owner>.github.io/ufh-designer/`; assets use relative paths, so it works from any sub-path.
 
 ### Project structure
 

@@ -338,11 +338,44 @@ To verify calculations, run the test cases in TESTS.md against the live applicat
 - Tested on Chrome, Firefox, Safari, Edge
 - Requires JavaScript enabled
 
+## Development
+
+The app is a React + TypeScript project built with Vite.
+
+```bash
+npm install
+npm run dev        # start dev server
+npm run typecheck  # TypeScript check
+npm run build      # typecheck + production build into dist/
+npm run preview    # serve the production build
+```
+
+Deployment to GitHub Pages runs from `.github/workflows/deploy.yml` on every push to `main`
+(Pages source must be set to "GitHub Actions" in the repository settings).
+
+### Project structure
+
+```
+src/
+  main.tsx                 # entry point, global CSS imports
+  App.tsx                  # top-level state and layout
+  types.ts                 # domain types (Room, Tool, Viewport, ...)
+  constants.ts             # materials, UFH systems, defaults, select options
+  lib/geometry.ts          # coordinate transforms, snapping, zoom, wall derivation
+  lib/heatLoss.ts          # heat-loss + UFH performance calculations (pure)
+  lib/renderer.ts          # canvas drawing (pure function of the scene)
+  state/projectReducer.ts  # rooms / selection reducer
+  hooks/useWindowWidth.ts
+  components/              # Header, Toolbar, DrawingCanvas, ContextualToolbar,
+                           # SettingsPanel, ResultsPanel, form fields
+  styles/app.css           # single stylesheet (zinc/monochrome tokens, floating panels)
+```
+
 ## Files
 
-- `index.html` - Main application structure
-- `style.css` - Professional UI styling
-- `app.js` - Application logic and calculations (v1.1.0)
+- `index.html` - HTML shell (mounts the React app)
+- `src/` - Application source (see Project structure above)
+- `app-v1.js` - Legacy wall-based version (unused, kept for reference)
 - `FEATURES.md` - Complete feature documentation
 - `TESTS.md` - Test specifications and validation
 - `README.md` - This file

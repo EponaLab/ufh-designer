@@ -1,0 +1,1066 @@
+/*
+ * UFH Designer — single stylesheet.
+ * Monochrome (shadcn "zinc") look: neutral surfaces, 1px borders, small radii.
+ * Colour is reserved for information: heated rooms, validation, limits, destructive actions.
+ */
+
+/* ---------------------------------------------------------------- Tokens */
+
+:root {
+    --background: #ffffff;
+    --foreground: #09090b;
+    --card: #ffffff;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --accent: #f4f4f5;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    --ring: #a1a1aa;
+    --primary: #18181b;
+    --primary-foreground: #fafafa;
+    --canvas: #fafafa;
+
+    /* Informational colours */
+    --heat: #ea580c;
+    --glass: #0ea5e9;
+    --success: #16a34a;
+    --success-bg: #f0fdf4;
+    --success-border: #bbf7d0;
+    --destructive: #dc2626;
+    --destructive-bg: #fef2f2;
+    --destructive-border: #fecaca;
+
+    --radius: 0.5rem;
+    --radius-sm: 0.375rem;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+    --shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+
+    --gap: 12px;          /* distance of floating panels from the edges */
+    --header-h: 48px;
+    --panel-w: 264px;
+    --toolbar-w: 236px;
+
+    --z-overlay: 5;
+    --z-panel: 10;
+    --z-mobilebar: 30;
+    --z-sheet: 40;
+}
+
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--foreground);
+    background: var(--canvas);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+    font: inherit;
+    color: inherit;
+}
+
+/* ---------------------------------------------------------------- Layout */
+
+.app-container {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ---------------------------------------------------------------- Header */
+
+.header {
+    height: var(--header-h);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--gap);
+    background: var(--background);
+    border-bottom: 1px solid var(--border);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.header-left i {
+    font-size: 15px;
+}
+
+.header h1 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.version {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 0.4rem;
+    line-height: 18px;
+}
+
+/* ---------------------------------------------------------------- Buttons */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    height: 32px;
+    padding: 0 0.75rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn i {
+    font-size: 12px;
+}
+
+.btn:focus-visible,
+.tool-btn:focus-visible,
+.mobile-tool-btn:focus-visible,
+.close-btn:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+}
+
+.btn-primary {
+    width: 100%;
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+.btn-primary:hover {
+    background: #27272a;
+}
+
+.btn-secondary {
+    background: var(--background);
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover {
+    background: var(--accent);
+}
+
+.close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.close-btn:hover {
+    background: var(--accent);
+    color: var(--foreground);
+}
+
+/* ---------------------------------------------------------------- Form controls */
+
+input[type='number'],
+input[type='text'],
+select {
+    height: 28px;
+    width: 100%;
+    min-width: 0;
+    padding: 0 0.5rem;
+    border: 1px solid var(--input);
+    border-radius: var(--radius-sm);
+    background: var(--background);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+select {
+    appearance: none;
+    padding-right: 1.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+    cursor: pointer;
+}
+
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px rgb(161 161 170 / 0.25);
+}
+
+input:disabled,
+select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+label {
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+
+/* ---------------------------------------------------------------- Canvas */
+
+.canvas-area {
+    position: absolute;
+    inset: 0;
+    background: var(--canvas);
+}
+
+#drawingCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Cursor position / status: small floating pill, doesn't block the canvas */
+.canvas-info {
+    position: absolute;
+    left: var(--gap);
+    bottom: var(--gap);
+    z-index: var(--z-overlay);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.6rem;
+    background: rgb(255 255 255 / 0.85);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--muted-foreground);
+    pointer-events: none;
+}
+
+#cursorPos {
+    font-variant-numeric: tabular-nums;
+    color: var(--foreground);
+}
+
+#canvasStatus::before {
+    content: '·';
+    margin-right: 0.5rem;
+}
+
+/* ---------------------------------------------------------------- Floating panels */
+
+.toolbar,
+.properties-panel,
+.results-section {
+    position: absolute;
+    z-index: var(--z-panel);
+    background: rgb(255 255 255 / 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow-y: auto;
+    max-height: calc(100% - 2 * var(--gap));
+}
+
+.toolbar {
+    top: var(--gap);
+    left: var(--gap);
+    width: var(--toolbar-w);
+    padding: 0.5rem;
+}
+
+/* Right column (desktop): room panel with the results card stacked underneath */
+.side-column {
+    display: contents; /* small screens: children are fixed sheets */
+}
+
+@media (min-width: 1025px) {
+    .side-column {
+        position: absolute;
+        top: var(--gap);
+        right: var(--gap);
+        z-index: var(--z-panel);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: var(--panel-w);
+        max-height: calc(100% - 2 * var(--gap));
+        pointer-events: none; /* gaps between cards stay clickable on the canvas */
+    }
+
+    .side-column > .properties-panel,
+    .side-column > .results-section {
+        position: relative;
+        width: 100%;
+        max-height: none;
+        min-height: 0;
+        flex: 0 1 auto;
+        pointer-events: auto;
+    }
+
+    /* Results keep a usable height when the room panel is long */
+    .side-column > .results-section {
+        flex-shrink: 0;
+        max-height: 50vh;
+    }
+}
+
+.toolbar-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 40px;
+    padding: 0 0.5rem 0 0.75rem;
+    background: rgb(255 255 255 / 0.95);
+    border-bottom: 1px solid var(--border);
+}
+
+.toolbar-header h3 {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.section-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0.5rem -0.5rem;
+}
+
+/* ---------------------------------------------------------------- Tool bar */
+
+/* Segmented tool switcher */
+.tool-group {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    padding: 2px;
+    background: var(--muted);
+    border-radius: var(--radius-sm);
+}
+
+.tool-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 44px;
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--muted-foreground);
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.tool-btn i {
+    font-size: 13px;
+}
+
+.tool-btn:hover {
+    color: var(--foreground);
+}
+
+.tool-btn.active {
+    background: var(--background);
+    color: var(--foreground);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Label / value rows */
+.param-group,
+.config-section {
+    display: grid;
+    grid-template-columns: 1fr 92px;
+    align-items: center;
+    gap: 6px 8px;
+}
+
+.param-group {
+    padding: 0 0.25rem;
+}
+
+.action-group {
+    margin-top: 0.5rem;
+}
+
+/* ---------------------------------------------------------------- Settings panel */
+
+.config-section {
+    grid-template-columns: minmax(0, 1fr) 124px;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.config-section:last-child {
+    border-bottom: none;
+}
+
+.config-section h3 {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
+}
+
+.config-section .section-divider {
+    grid-column: 1 / -1;
+    margin: 0.25rem -0.75rem;
+}
+
+#overlayOptions {
+    display: contents;
+}
+
+.section-note {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    color: var(--muted-foreground);
+}
+
+#propertiesContent {
+    padding: 0.75rem;
+}
+
+.properties-empty {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted-foreground);
+    font-size: 12px;
+}
+
+.properties-empty i {
+    font-size: 12px;
+}
+
+/* Selected room: editable name + type badge */
+.room-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0.75rem 0;
+}
+
+.room-header > i {
+    width: 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+
+.room-header > i.is-heated {
+    color: var(--heat);
+}
+
+.properties-panel .room-name-input {
+    flex: 1;
+    height: 28px;
+    padding: 0 0.35rem;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: normal;
+}
+
+.properties-panel .room-name-input:hover {
+    border-color: var(--input);
+}
+
+.properties-panel .room-name-input:focus {
+    background: var(--background);
+    border-color: var(--ring);
+}
+
+.room-name-static {
+    flex: 1;
+    padding: 0 0.35rem;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 28px;
+}
+
+.room-header > i.is-glass {
+    color: var(--glass);
+}
+
+.badge {
+    flex-shrink: 0;
+    padding: 0 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 18px;
+    color: var(--muted-foreground);
+}
+
+.badge-heat {
+    color: var(--heat);
+    border-color: #fed7aa;
+    background: #fff7ed;
+}
+
+.room-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.75rem 0.6rem 2.1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+}
+
+.room-meta i {
+    font-size: 10px;
+}
+
+.panel-actions {
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+/* Zone selected: the delete button is the panel's only content */
+.panel-actions-only {
+    border-top: none;
+}
+
+.btn-destructive-outline {
+    width: 100%;
+    height: 30px;
+    background: var(--background);
+    border-color: var(--border);
+    color: var(--destructive);
+    font-size: 12px;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-destructive-outline:hover {
+    background: var(--destructive-bg);
+    border-color: var(--destructive-border);
+}
+
+/* Project settings appear in the right panel only when the left tool bar is hidden */
+.mobile-only {
+    display: none;
+}
+
+/* ---------------------------------------------------------------- Temperature chips (on the drawing) */
+
+.room-temp {
+    position: absolute;
+    z-index: var(--z-overlay);
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 22px;
+    padding: 0 0.45rem 0 0.4rem;
+    background: rgb(255 255 255 / 0.9);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: var(--shadow-sm);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--foreground);
+    font-variant-numeric: tabular-nums;
+    cursor: text;
+    white-space: nowrap;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.room-temp i {
+    font-size: 10px;
+    color: var(--muted-foreground);
+}
+
+.room-temp.is-heated i {
+    color: var(--heat);
+}
+
+.room-temp span {
+    font-weight: 500;
+    color: var(--muted-foreground);
+}
+
+.room-temp:hover,
+.room-temp.is-selected {
+    border-color: var(--ring);
+}
+
+.room-temp:focus-within {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px rgb(161 161 170 / 0.25);
+}
+
+.room-temp .room-temp-input {
+    width: 3.2ch;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: right;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.room-temp .room-temp-input::-webkit-outer-spin-button,
+.room-temp .room-temp-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.room-temp .room-temp-input:focus {
+    box-shadow: none;
+}
+
+/* ---------------------------------------------------------------- Side length field (double-click a side) */
+
+.length-editor {
+    position: absolute;
+    z-index: var(--z-panel);
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 26px;
+    padding: 0 0.5rem 0 0.25rem;
+    background: var(--background);
+    border: 1px solid var(--ring);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md), 0 0 0 3px rgb(161 161 170 / 0.25);
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+
+.length-editor input[type='text'] {
+    width: 6ch;
+    height: 22px;
+    padding: 0 0.25rem;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    font-weight: 600;
+    color: var(--foreground);
+    text-align: right;
+}
+
+.length-editor input[type='text']:focus {
+    box-shadow: none;
+}
+
+.length-editor.is-invalid {
+    border-color: var(--destructive);
+    box-shadow: var(--shadow-md), 0 0 0 3px rgb(220 38 38 / 0.15);
+}
+
+/* ---------------------------------------------------------------- Results */
+
+.results-section .toolbar-header {
+    height: 34px;
+}
+
+/* Three key figures in one row */
+.result-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 0.5rem 0.75rem 0.4rem;
+}
+
+.result-stats > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.result-stats > div + div {
+    padding-left: 0.6rem;
+    border-left: 1px solid var(--border);
+}
+
+.result-stats > div:not(:last-child) {
+    padding-right: 0.6rem;
+}
+
+.result-stats label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.result-stats strong {
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.result-stats strong.is-over-limit {
+    color: var(--destructive);
+}
+
+.validation-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin: 0 0.75rem 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.validation-status i {
+    margin-top: 2px;
+}
+
+.validation-status.success {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: #166534;
+}
+
+.validation-status.success i {
+    color: var(--success);
+}
+
+.validation-status.error {
+    background: var(--destructive-bg);
+    border-color: var(--destructive-border);
+    color: #991b1b;
+}
+
+.validation-status.error i {
+    color: var(--destructive);
+}
+
+/* One compact row per heated room */
+.result-rooms {
+    list-style: none;
+    border-top: 1px solid var(--border);
+}
+
+.result-room {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    grid-template-areas: 'icon name loss';
+    column-gap: 0.4rem;
+    width: 100%;
+    padding: 0.35rem 0.75rem;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.result-room:hover {
+    background: var(--accent);
+}
+
+.result-room.is-selected {
+    background: var(--muted);
+    box-shadow: inset 2px 0 0 var(--foreground);
+}
+
+.result-room > i {
+    grid-area: icon;
+    align-self: center;
+    font-size: 11px;
+}
+
+.result-room .is-ok {
+    color: var(--success);
+}
+
+.result-room .is-bad {
+    color: var(--destructive);
+}
+
+.result-room-name {
+    grid-area: name;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.result-room-loss {
+    grid-area: loss;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.result-room-detail {
+    grid-column: 2 / -1;
+    font-size: 11px;
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Full breakdown, collapsed by default */
+.result-breakdown summary {
+    padding: 0.4rem 0.75rem;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    user-select: none;
+}
+
+.result-breakdown summary:hover {
+    color: var(--foreground);
+}
+
+.breakdown-details {
+    padding: 0 0.75rem 0.5rem;
+}
+
+.breakdown-group + .breakdown-group {
+    margin-top: 0.4rem;
+}
+
+.breakdown-group h4 {
+    padding: 0.25rem 0 0.1rem;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.breakdown-item {
+    padding: 0.2rem 0;
+}
+
+.breakdown-item + .breakdown-item {
+    border-top: 1px solid var(--border);
+}
+
+.breakdown-item-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 11px;
+}
+
+.breakdown-item-header span:last-child {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.breakdown-item-details {
+    font-size: 10px;
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- Mobile bottom bar */
+
+.mobile-bottom-toolbar {
+    display: none;
+}
+
+.mobile-tool-btn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 44px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted-foreground);
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.mobile-tool-btn i {
+    font-size: 15px;
+}
+
+.mobile-tool-btn span {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.mobile-tool-btn.active {
+    background: var(--muted);
+    color: var(--foreground);
+}
+
+.mobile-calc-btn {
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+/* ---------------------------------------------------------------- Desktop only */
+
+@media (min-width: 1025px) {
+    /* Settings are always visible on desktop: no close button, no header bar */
+    .properties-panel .toolbar-header {
+        display: none;
+    }
+}
+
+/* ---------------------------------------------------------------- Tablet & phone */
+
+@media (max-width: 1024px) {
+    .toolbar {
+        display: none;
+    }
+
+    .mobile-bottom-toolbar {
+        position: absolute;
+        left: var(--gap);
+        right: var(--gap);
+        bottom: var(--gap);
+        z-index: var(--z-mobilebar);
+        display: flex;
+        gap: 2px;
+        padding: 4px;
+        background: rgb(255 255 255 / 0.95);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-md);
+    }
+
+    .canvas-info {
+        bottom: calc(var(--gap) + 52px + 8px);
+    }
+
+    /* Settings: sheet sliding in from the right */
+    .properties-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: var(--z-sheet);
+        display: none;
+        width: min(340px, 88vw);
+        max-height: none;
+        border-radius: 0;
+        border-width: 0 0 0 1px;
+        background: var(--background);
+        box-shadow: var(--shadow-md);
+    }
+
+    .properties-panel.active {
+        display: block;
+        animation: sheet-from-right 0.2s ease-out;
+    }
+
+    .mobile-only {
+        display: grid;
+    }
+
+    /* Results: bottom sheet */
+    .results-section {
+        position: fixed;
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: var(--z-sheet);
+        width: auto;
+        max-height: 75vh;
+        border-radius: var(--radius) var(--radius) 0 0;
+        border-width: 1px 0 0;
+        background: var(--background);
+        box-shadow: var(--shadow-md);
+        animation: sheet-from-bottom 0.2s ease-out;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-right .btn {
+        height: 28px;
+        padding: 0 0.6rem;
+        font-size: 12px;
+    }
+
+    #canvasStatus {
+        display: none;
+    }
+}
+
+@keyframes sheet-from-right {
+    from { transform: translateX(100%); }
+    to   { transform: none; }
+}
+
+@keyframes sheet-from-bottom {
+    from { transform: translateY(100%); }
+    to   { transform: none; }
+}
